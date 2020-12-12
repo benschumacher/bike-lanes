@@ -1,0 +1,22 @@
+{
+  "name": "bike-lanes",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "twilio-run",
+    "deploy": "twilio-run deploy"
+  },
+  "dependencies": {
+    "exif-js": "^2.3.0",
+    "express-session": "^1.17.1",
+    "ext-name": "^5.0.0",
+    "got": "^11.8.1"
+  },
+  "devDependencies": {
+    "twilio-run": "^2.6.0"
+  },
+  "engines": {
+    "node": "10"
+  }
+}

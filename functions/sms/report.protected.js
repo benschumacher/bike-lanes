@@ -1,20 +1,41 @@
+const assets = Runtime.getAssets();
 
 // This is your new function. To start, set the name and path on the left.
-const EXIF = require('exif-js');
-EXIF.debug = true;
+// const EXIF = require('exif-js');
+// EXIF.debug = true;
 
-const extName = require('ext-name');
+const firebase = require('firebase-admin');
+
 const got = require('got');
-const session = require('express-session');
+const sha256 = require('crypto').createHash('sha256');
+const db = require(assets['/lib/datastore.js'].path)
 
 exports.handler = function(context, event, callback) {
     let twiml = new Twilio.twiml.MessagingResponse();
     const { NumMedia, From: SenderNumber, MessageSid } = event;
+
+    const counterParty = sha256.update(SenderNumber).digest('base64').replace('+', '-').replace('/', '_').replace(/=+$/, '');
+    const rootRef = db.ref();
+    const userRef = db.ref(`phone-numbers/${counterParty}`);
+
     console.log("event = " + JSON.stringify(event));
     console.log("Got message with " + NumMedia + " attachments.");
     
-    if (NumMedia != 1) {
-        twiml.message("Please send a single message at a time.");
+    var user = {totalReports: 0};
+    userRef.once("value").then((snapshot) => {
+        console.log("snapshot.val() = " + snapshot.val())
+        user = snapshot.val() || user;        
+    });
+
+    if (NumMedia > 1) {
+        twiml.message("Please send a single image at a time.");
+        return callback(null, twiml);
+    }
+
+    if (user.lastOpenReport && 0 == NumMedia) {
+        var location = event.message;
+        console.log("location = ${location}");
+        twiml.message("Thank you for your report!");
         return callback(null, twiml);
     }
     
@@ -23,37 +44,23 @@ exports.handler = function(context, event, callback) {
     
     got(mediaUrl).buffer().then(image => {
         console.log(`image size = ${image.length}`);
-        EXIF.readFromBinaryFile(image.buffer, function() {
-            console.log(JSON.stringify(this));
-    		if (EXIF.getTag(this, "GPSLatitude")) {
-    			var lat_deg = EXIF.getTag(this, "GPSLatitude")[0];
-    			var lat_min = EXIF.getTag(this, "GPSLatitude")[1];
-    			var lat_sec = EXIF.getTag(this, "GPSLatitude")[2];
-    			var lng_deg = EXIF.getTag(this, "GPSLongitude")[0];
-    			var lng_min = EXIF.getTag(this, "GPSLongitude")[1];
-    			var lng_sec = EXIF.getTag(this, "GPSLongitude")[2];
-    			var gps_lat = (lat_deg+(((lat_min*60)+lat_sec))/3600); //DMS to decimal
-                var gps_lng = -(lng_deg+(((lng_min*60)+lng_sec))/3600); //DMS to decimal
-            }
-            else {
-                console.log("no EXIF data on media");
-            }
-    
-    		if (EXIF.getTag(this, "DateTimeOriginal")) {
-    			var capturetime = EXIF.getTag(this, "DateTimeOriginal");
-    			var isotime = capturetime.split(" ")[1].split(':')[0] + ':' + capturetime.split(" ")[1].split(':')[1] + ':00';
-    			var isodate = capturetime.split(" ")[0].replace(/:/g,'-');
-    			var iso_date_time = isodate + 'T' + isotime;
-    			twiml.message('This image was captured at: ' + iso_date_time);
-    			return callback(null, twiml);
-    		}
-        })
     }).catch(error => {
         console.log(`can't load image: ${error}`);
         return callback(error);
     });
 
-    twiml.message("Couldn't process message, please try again later.");
+    const newMediaKey = rootRef.child('media').push().key;
+    const newReportKey = rootRef.child('reports').push().key;
+    var updates = {};
+    updates[`/media/${newMediaKey}`] = {mediaUrl: mediaUrl, dimensions: {}};
+    updates[`/reports/${newReportKey}`] = {media: newMediaKey, reporter: counterParty, loction: {}}
+    updates[`/phone-numbers/${counterParty}`] = {
+        lastOpenReport: newReportKey,
+        totalReports: firebase.database.ServerValue.increment(1)
+    };
+    rootRef.update(updates);
+
+    twiml.message("Thank you. Will you share your location?");
     callback(null, twiml);
     // got('https://dog-api.kinduff.com/api/facts', {json: true}).then(response => {
     //     twiml.message(response.body.facts[0]);

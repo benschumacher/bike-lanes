@@ -8,9 +8,11 @@
     "deploy": "twilio-run deploy"
   },
   "dependencies": {
+    "app-module-path": "^2.2.0",
+    "crypto": "^1.0.1",
     "exif-js": "^2.3.0",
     "express-session": "^1.17.1",
-    "ext-name": "^5.0.0",
+    "firebase-admin": "^9.4.2",
     "got": "^11.8.1"
   },
   "devDependencies": {
